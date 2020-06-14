@@ -20,7 +20,7 @@
 
 /* Includes ------------------------------------------------------------------*/
 #include "main.h"
-
+#include <stdbool.h>
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
 
@@ -28,7 +28,18 @@
 
 /* Private typedef -----------------------------------------------------------*/
 /* USER CODE BEGIN PTD */
+typedef struct _button_ {
+	uint8_t counter;
+	bool maybe_pressed;
+	bool pressed;
 
+}button_t;
+
+button_t button = {
+		.counter = 0,
+		.maybe_pressed = false,
+		.pressed = false,
+};
 /* USER CODE END PTD */
 
 /* Private define ------------------------------------------------------------*/
@@ -60,7 +71,34 @@ static void MX_USART2_UART_Init(void);
 
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
+/**
+  * @brief  EXTI line detection callback.
+  * @param  GPIO_Pin Specifies the port pin connected to corresponding EXTI line.
+  * @retval None
+  */
+void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin)
+{
+	button.maybe_pressed = true;
+}
 
+/**
+  * @brief  Period elapsed callback in non-blocking mode each 1mSec
+  * @param  htim TIM handle
+  * @retval None
+  */
+__weak void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
+{
+	if (button.maybe_pressed == true) {
+		button.counter++;
+	}
+
+	if ( button.counter >= 50 ) {
+		button.maybe_pressed = false;
+		button.counter = 0;
+		HAL_GPIO_TogglePin(LD2_GPIO_Port, LD2_Pin);
+	}
+
+}
 /* USER CODE END 0 */
 
 /**
@@ -94,7 +132,7 @@ int main(void)
   MX_TIM2_Init();
   MX_USART2_UART_Init();
   /* USER CODE BEGIN 2 */
-
+  HAL_TIM_Base_Start_IT(&htim2);
   /* USER CODE END 2 */
 
   /* Infinite loop */
