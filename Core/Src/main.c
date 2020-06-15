@@ -46,22 +46,24 @@ typedef enum _fsm_evts_ {
 	EVT_DOT,
 	EVT_DASH,
 	EVT_CONFIRM_DOT,
+	EVT_CONFIRM_DASH,
 	EVT_PRESSED,
+	EVT_TIMEOUT,
 
 }fsm_evts;
 
 typedef struct _fsm_ {
-
-	uint16_t counter_error;
+	uint16_t count_timeout;
 	uint16_t counter_time;
 	fsm_states state;
 	fsm_evts evt;
-	bool new_evt;
+	bool new_evt:1;
+	bool start_timeout:1;
 
 }fsm_t;
 
 fsm_t fsm = {
-		.counter_error = 0,
+		.count_timeout = 0,
 		.counter_time = 0,
 		.state = STATE_IDLE,
 		.evt = EVT_NO_EVT,
@@ -84,9 +86,11 @@ button_t button = {
 
 /* Private define ------------------------------------------------------------*/
 /* USER CODE BEGIN PD */
-#define DOT_TIME		(	   	 200 		)
-#define DASH_TIME		(		1000		)
-#define TIME_ALLOWED 	(	DOT_TIME + 300	)
+#define DOT_TIME			(	   	 100 		)
+#define DASH_TIME			(		 600		)
+#define DOT_TIME_ALLOWED 	(	DOT_TIME + 300	)
+#define DASH_TIME_ALLOWED	(	DASH_TIME - 300	)
+#define TIMEOUT				(		5000		)
 /* USER CODE END PD */
 
 /* Private macro -------------------------------------------------------------*/
@@ -149,11 +153,17 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
 			fsm.counter_time++;
 		} else {
 
-			if ( fsm.counter_time >= DOT_TIME && fsm.counter_time <= TIME_ALLOWED ) {
+			if ( fsm.counter_time >= DOT_TIME && fsm.counter_time <= DOT_TIME_ALLOWED ) {
 				button.pressed = false;
 				fsm.evt = EVT_CONFIRM_DOT;
 				fsm.new_evt = true;
+			} else if ( fsm.counter_time >= DASH_TIME_ALLOWED && fsm.counter_time <= DASH_TIME ) {
+				button.pressed = false;
+				fsm.evt = EVT_CONFIRM_DASH;
+				fsm.new_evt = true;
 			}
+
+
 
 			fsm.counter_time = 0;
 		}
@@ -175,7 +185,17 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
 		}
 	}
 
+	if ( fsm.start_timeout == true ) {
+		fsm.count_timeout++;
+	} else {
+		fsm.count_timeout = 0;
+	}
 
+	if ( fsm.count_timeout >= TIMEOUT ) {
+		fsm.count_timeout = 0;
+		fsm.evt = EVT_TIMEOUT;
+		fsm.new_evt = true;
+	}
 
 }
 
@@ -211,40 +231,50 @@ void fsm_run ( fsm_t *fsm ) {
 	if ( fsm->new_evt == true ) {
 		fsm->new_evt = false;
 		switch ( fsm->state ) {
-		case STATE_IDLE:
+		case STATE_IDLE:	/* DOT */
 			if ( fsm->evt == EVT_DOT ) {
 				fsm->state= STATE_IDLE;
 			} else if ( fsm->evt == EVT_DASH ) {
 				fsm->state= STATE_IDLE;
 			} else if ( fsm->evt == EVT_CONFIRM_DOT ) {
+				fsm->start_timeout = true; /**/
 				fsm->state= STATE_DOT;
 			}
 			print_current_state(fsm);
 			break;
 
-		case STATE_DOT:
-			if ( fsm->evt == EVT_DASH ) {
+		case STATE_DOT:		/* DASH */
+			if ( fsm->evt == EVT_DASH || fsm->evt == EVT_CONFIRM_DASH ) {
+				fsm->count_timeout = 0;
+				fsm->start_timeout = true; /**/
 				fsm->state= STATE_DASH_1;
-			} else if ( fsm->evt == EVT_CONFIRM_DOT ) {
+			} else if ( fsm->evt == EVT_CONFIRM_DOT || fsm->evt == EVT_TIMEOUT ) {
+				fsm->start_timeout = false; /**/
 				fsm->state= STATE_IDLE;
 			}
 			print_current_state(fsm);
 			break;
 
-		case STATE_DASH_1:
-			if ( fsm->evt == EVT_DASH ) {
+		case STATE_DASH_1:	/* DASH */
+			if ( fsm->evt == EVT_DASH || fsm->evt == EVT_CONFIRM_DASH ) {
+				fsm->count_timeout = 0;
+				fsm->start_timeout = true; /**/
 				fsm->state= STATE_DASH_2;
-			} else if ( fsm->evt == EVT_CONFIRM_DOT ) {
+			} else if ( fsm->evt == EVT_CONFIRM_DOT || fsm->evt == EVT_TIMEOUT ) {
+				fsm->start_timeout = false; /**/
 				fsm->state= STATE_IDLE;
 			}
 			print_current_state(fsm);
 			break;
 
-		case STATE_DASH_2:
-			if ( fsm->evt == EVT_DASH ) {
+		case STATE_DASH_2: /* DASH */
+			if ( fsm->evt == EVT_DASH || fsm->evt == EVT_CONFIRM_DASH ) {
+				fsm->count_timeout = 0;
+				fsm->start_timeout = true; /**/
 				HAL_GPIO_WritePin(LD2_GPIO_Port, LD2_Pin, 1);
 				fsm->state = STATE_ACCEPTED;
-			} else if ( fsm->evt == EVT_CONFIRM_DOT ) {
+			} else if ( fsm->evt == EVT_CONFIRM_DOT || fsm->evt == EVT_TIMEOUT ) {
+				fsm->start_timeout = false; /**/
 				fsm->state = STATE_IDLE;
 			}
 			print_current_state(fsm);
