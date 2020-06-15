@@ -68,6 +68,7 @@ fsm_t fsm = {
 		.state = STATE_IDLE,
 		.evt = EVT_NO_EVT,
 		.new_evt = false,
+		.start_timeout = false,
 };
 
 typedef struct _button_ {
@@ -140,12 +141,17 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
 	}
 
 
-	if ( button.counter >= 10 ) {
-		button.maybe_pressed = false;
-		button.counter = 0;
-		button.pressed = true;
-		fsm.evt = EVT_PRESSED;
-		fsm.new_evt = true;
+	if ( button.counter >= 20 ) {
+		if ( !(GPIOC->IDR & (1<<13)) ) { /* still pressed */
+			button.maybe_pressed = false;
+			button.counter = 0;
+			button.pressed = true;
+			fsm.evt = EVT_PRESSED;
+			fsm.new_evt = true;
+		} else {
+			button.maybe_pressed = false;
+			button.pressed = false;
+		}
 	}
 
 	if( button.pressed == true ) { /* IDK when clear this flag yet!!! */
@@ -163,9 +169,8 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
 				fsm.new_evt = true;
 			}
 
-
-
 			fsm.counter_time = 0;
+
 		}
 	}
 
